@@ -1,6 +1,7 @@
 use eframe::egui;
 use nvml_wrapper::enum_wrappers::device::TemperatureSensor;
 use nvml_wrapper::Nvml;
+use egui::Color32;
 
 struct GpuData{
     name: String,
@@ -31,6 +32,8 @@ fn main() -> Result<(), eframe::Error> {
 struct MyApp {
     gpu_data: GpuData,
     animate_memory_bar: bool,
+    animate_thermometer_bar: bool,
+    c_to_f_indexer:usize,
 }
 
 impl Default for MyApp {
@@ -38,12 +41,14 @@ impl Default for MyApp {
         Self {
             gpu_data: GpuData{
                 name: "No Name Data".to_string(),
-                memory_total: 0, //"No Memory Data".to_string(),
-                memory_used: 0,//"No Memory Data".to_string(),
-                temperature: 0,//"No Temperature Data".to_string(),
+                memory_total: 0,
+                memory_used: 0,
+                temperature: 0,
                 utilization: "No Utiization Data".to_string(),
             },
             animate_memory_bar: false,
+            animate_thermometer_bar:false,
+            c_to_f_indexer: 0,
         }
     }
 }
@@ -84,21 +89,34 @@ impl eframe::App for MyApp {
                 });
             });
 
-            let insert_text = self.gpu_data.memory_used.to_string() + "MB/" +self.gpu_data.memory_total.to_string().as_str() + "MB";
-            //let animate_annotation = ui.add(progress).on_hover_text(insert_text);
+
+            //Memory bar code
+            let insert_memory_text = self.gpu_data.memory_used.to_string() + "MB/" +self.gpu_data.memory_total.to_string().as_str() + "MB";
             ui.label("Memory Usage");
-            //let used = (self.gpu_data.memory_used/self.gpu_data.memory_total) as f32;
             let memory_bar = egui::ProgressBar::new(memory_util as f32/100.0)
             .show_percentage()
             .animate(self.animate_memory_bar);
             self.animate_memory_bar = ui
             .add(memory_bar)
-            .on_hover_text(insert_text)
+            .on_hover_text(insert_memory_text)
             .hovered();
 
-            ui.vertical(|ui|{
-                ui.label("Thermometer");
-            });
+            //Thermometer
+            let c_to_f = ["°C", "°F"];
+            let curr_temp_type = c_to_f[self.c_to_f_indexer];
+
+            ui.label("Thermometer");
+            let thermometer = egui::ProgressBar::new(self.gpu_data.temperature as f32/100.0)
+            .fill(Color32::from_rgb(255, 0, 0))
+            .animate(self.animate_thermometer_bar);
+            self.animate_thermometer_bar = ui
+            .add(thermometer)
+            .on_hover_text(self.gpu_data.temperature.to_string().as_str().to_owned() + curr_temp_type)
+            .hovered();
+
+            //image of circle/draw filled circle with red
+            //text on circle with current temperature
+            //can click on the text as a button which changes from C to F
         });
     }
 }
