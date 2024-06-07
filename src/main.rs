@@ -34,6 +34,7 @@ struct MyApp {
     animate_memory_bar: bool,
     animate_thermometer_bar: bool,
     c_to_f_indexer:usize,
+    //tester: u32,
 }
 
 impl Default for MyApp {
@@ -49,8 +50,21 @@ impl Default for MyApp {
             animate_memory_bar: false,
             animate_thermometer_bar:false,
             c_to_f_indexer: 0,
+            //tester: 0
         }
     }
+}
+
+fn color_gradient(temperature:u32)->Color32{
+    let mut blue:i32 = 255 - ( 2*(temperature) + 44) as i32;
+    let mut red = (2*temperature) + 88;
+    if red > 255{
+        red = 255;
+    }
+    if blue < 0{
+        blue = 0;
+    }
+    return Color32::from_rgb(red as u8, 0, blue as u8);
 }
 
 impl eframe::App for MyApp {
@@ -107,12 +121,15 @@ impl eframe::App for MyApp {
 
             ui.label("Thermometer");
             let thermometer = egui::ProgressBar::new(self.gpu_data.temperature as f32/100.0)
-            .fill(Color32::from_rgb(255, 0, 0))
+            .fill(color_gradient(self.gpu_data.temperature))
             .animate(self.animate_thermometer_bar);
             self.animate_thermometer_bar = ui
             .add(thermometer)
             .on_hover_text(self.gpu_data.temperature.to_string().as_str().to_owned() + curr_temp_type)
             .hovered();
+
+            //Testing bar
+            //ui.add(egui::Slider::new(&mut self.tester, 0..=100).text("Testing Bar"));
 
             //image of circle/draw filled circle with red
             //text on circle with current temperature
