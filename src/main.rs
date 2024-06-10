@@ -38,6 +38,10 @@ struct MyApp {
     c_to_f_indexer: usize,
     update_blocker: bool,
     //tester: u32,
+    nvml : Nvml,
+    //device_wrapped : Result<nvml_wrapper::Device, NvmlError>,
+    //device: Device,
+
 }
 
 impl Default for MyApp {
@@ -55,6 +59,7 @@ impl Default for MyApp {
             c_to_f_indexer: 0,
             update_blocker: true,
             //tester: 0
+            nvml : Nvml::init().expect("NVML failed to initialize"), // Make this not crash for non nvidia systems/non gpu computers (could be implemented in the update function)
         }
     }
 }
@@ -83,13 +88,13 @@ impl eframe::App for MyApp {
                 thread::sleep(Duration::from_millis(500));
             });
         }
+
         egui::CentralPanel::default().show(ctx, |ui| {
             //populates gpu_data with gpu information
-            let nvml = Nvml::init().expect("NVML failed to initialize"); //make this not exit the program
-            let device_wrapped = nvml.device_by_index(0);
+            let device_wrapped = self.nvml.device_by_index(0);
             let device = device_wrapped.unwrap();
 
-            let curr_gpudata = GpuData {
+            self.gpu_data = GpuData {
                 name: device.name().unwrap(),
                 memory_used: device.memory_info().unwrap().used / 1024 / 1024,
                 memory_total: device.memory_info().unwrap().total / 1024 / 1024,
@@ -100,7 +105,6 @@ impl eframe::App for MyApp {
                     .utilization
                     .to_string(),
             };
-            self.gpu_data = curr_gpudata;
 
             let memory_util = ((((self.gpu_data.memory_used as f64
                 / self.gpu_data.memory_total as f64)
