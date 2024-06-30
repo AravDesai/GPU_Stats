@@ -8,7 +8,7 @@ use std::time::Duration;
 use egui_gauge::Gauge;
 use epaint;
 use egui_winit;
-use egui_plot::{self, PlotBounds, PlotPoint};
+use egui_plot::{self, Axis, PlotBounds, PlotPoint};
 
 struct GpuData {
     name: String,
@@ -102,6 +102,15 @@ impl eframe::App for MyApp {
                     thread::sleep(Duration::from_millis(500));
                 });
             }
+
+            // if ctx.input(|i| i.wants_repaint()) {
+                
+            // }
+
+            // println!("{}", self.tester);
+            // self.tester+=1;
+
+
             
             //populates gpu_data with gpu information
 
@@ -346,30 +355,31 @@ impl eframe::App for MyApp {
 
                 ui.add(data_point_slider);
 
-                if(self.memory_graph.len() > self.number_of_datapoints){
-                    self.memory_graph.pop();
+                while(self.memory_graph.len() > self.number_of_datapoints){
+                    self.memory_graph.remove(0);
                 }
                 self.memory_graph.push(self.gpu_data.memory_used as f32);
 
                 egui_plot::Plot::new("Memory Graph")
-                //.allow_zoom(false)
-                .allow_drag(false)
-                .allow_scroll(false)
-                .x_axis_label("Time")
-                .y_axis_label("Memory in use")
-                .show(ui,|plot_ui|{
-                    let memory_points = egui_plot::PlotPoints::from_ys_f32(&self.memory_graph);
-                    plot_ui.line(egui_plot::Line::new(memory_points));
+                    //.allow_zoom(false)
+                    .allow_drag(false)
+                    .allow_scroll(false)
+                    .x_axis_label("Time")
+                    .include_y(400.0)
+                    .y_axis_label("Memory in use")
+                    .show(ui, |plot_ui| {
+                        let memory_points = egui_plot::PlotPoints::from_ys_f32(&self.memory_graph);
+                        plot_ui.line(egui_plot::Line::new(memory_points));
 
-                    // let xcomp = 0.0 as f64;//self.number_of_datapoints as f64;
-                    // print!("xcomp: {}",xcomp);
-                    // let ycomp = self.memory_graph[0] as f64;
-                    // print!("ycomp: {}",ycomp);
+                        // let xcomp = 0.0 as f64;//self.number_of_datapoints as f64;
+                        // print!("xcomp: {}",xcomp);
+                        // let ycomp = self.memory_graph[0] as f64;
+                        // print!("ycomp: {}",ycomp);
 
-                    //plot_ui.zoom_bounds(Vec2{x:0.25, y:0.25}, PlotPoint{x:xcomp, y:ycomp});
+                        //plot_ui.zoom_bounds(Vec2{x:0.25, y:0.25}, PlotPoint{x:xcomp, y:ycomp});
 
-                    plot_ui.set_auto_bounds(true.into());
-                });
+                        plot_ui.set_auto_bounds(true.into());
+                    }); 
 
             })
         });
