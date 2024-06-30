@@ -1,10 +1,14 @@
-use eframe::egui;
-use egui::{Color32, ComboBox, Pos2, Response};
+use eframe::egui::{self, Vec2b};
+use egui::{Color32, ComboBox, Pos2, Response, Slider, Widget, Event, Vec2};
 use nvml_wrapper::enum_wrappers::device::TemperatureSensor;
 use nvml_wrapper::error::NvmlError;
 use nvml_wrapper::Nvml;
-use std::thread;
+use std::thread::{self, sleep};
 use std::time::Duration;
+use egui_gauge::Gauge;
+use epaint;
+use egui_winit;
+use egui_plot::{self, PlotBounds, PlotPoint};
 
 struct GpuData {
     name: String,
@@ -25,8 +29,6 @@ fn main() -> Result<(), eframe::Error> {
         "GPU stats",
         options,
         Box::new(|cc| {
-            // This gives us image support:
-            egui_extras::install_image_loaders(&cc.egui_ctx);
             Box::<MyApp>::default()
         }),
     )
@@ -38,11 +40,14 @@ struct MyApp {
     animate_thermometer_bar: bool,
     c_to_f_indexer: usize,
     update_blocker: bool,
-    //tester: u32,
+    tester: u64,
     nvml: Nvml,
     special_temp: u32,
     device_indexer: u32,
     fan_indexer: u32,
+    update_time: f64,
+    memory_graph: Vec<f32>,
+    number_of_datapoints: usize,
 }
 
 impl Default for MyApp {
@@ -59,11 +64,14 @@ impl Default for MyApp {
             animate_thermometer_bar: false,
             c_to_f_indexer: 0,
             update_blocker: true,
-            //tester: 0
+            tester: 1,
             nvml: Nvml::init().expect("NVML failed to initialize"), // Make this not crash for non nvidia systems/non gpu computers (could be implemented in the update function)
             special_temp: 0,
             device_indexer: 0,
             fan_indexer: 0,
+            update_time: 0.5,
+            memory_graph: [].to_vec(),
+            number_of_datapoints: 10,
         }
     }
 }
@@ -83,6 +91,18 @@ fn color_gradient(temperature: u32) -> Color32 {
 impl eframe::App for MyApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         egui::CentralPanel::default().show(ctx, |ui| {
+
+             //Makes the window autoupdate without user activity
+            if self.update_blocker {
+                self.special_temp = self.gpu_data.temperature;
+                let ctx2 = ctx.clone();
+                self.update_blocker = false;
+                thread::spawn(move || loop {
+                    ctx2.request_repaint();
+                    thread::sleep(Duration::from_millis(500));
+                });
+            }
+            
             //populates gpu_data with gpu information
 
             let device_wrapped = self.nvml.device_by_index(self.device_indexer);
@@ -99,17 +119,6 @@ impl eframe::App for MyApp {
                     .utilization
                     .to_string(),
             };
-
-            //Makes the window autoupdate without user activity
-            if self.update_blocker {
-                self.special_temp = self.gpu_data.temperature;
-                let ctx2 = ctx.clone();
-                self.update_blocker = false;
-                thread::spawn(move || loop {
-                    ctx2.request_repaint();
-                    thread::sleep(Duration::from_millis(500));
-                });
-            }
 
             let memory_util = ((((self.gpu_data.memory_used as f64
                 / self.gpu_data.memory_total as f64)
@@ -213,6 +222,31 @@ impl eframe::App for MyApp {
                                     }
                                 }
                             });
+
+                            let mut tester_combo = vec![];
+                            let mut test_count = 0;
+                            while(test_count <=3){
+                                tester_combo.push(test_count);
+                                test_count+=1;
+                            }
+                            
+                            egui::ComboBox::from_label("Tester")
+                            .selected_text(format!("Value {}", self.tester))
+                            .show_ui(ui, |ui| {
+                                for (index, value) in tester_combo.iter().enumerate() {
+                                    let indexer = index as u64;
+                                    if ui
+                                        .selectable_value(
+                                            &mut self.tester,
+                                            indexer,
+                                            format!("Value {}", index),
+                                        )
+                                        .clicked()
+                                    {
+                                        self.tester = indexer;
+                                    }
+                                }
+                            });
                     });
                 });
             });
@@ -289,8 +323,55 @@ impl eframe::App for MyApp {
                 Err(_E) => 0,
             };
 
-            ui.label("Number of Fans: ".to_owned() + &device.num_fans().unwrap().to_string());
-            ui.label("Fan speed: ".to_owned() + &fan_speed.to_string());
+
+            //Fan speed stuff [WIP]
+            // ui.label("Number of Fans: ".to_owned() + &device.num_fans().unwrap().to_string());
+            // ui.label("Fan speed: ".to_owned() + &fan_speed.to_string());
+            // let fan_gauge = egui_gauge::Gauge::new(fan_speed, 0..=100, 300.0, epaint::Color32::BLUE);
+            
+            // ui.spacing_mut().slider_width = 300.0;
+            // ui.add(Slider::new(&mut self.tester, 0..=100));
+            // let fan_gauge = Gauge::new(self.tester, 0..=100, 200.0, epaint::Color32::BLUE);
+            //ui.add(Gauge::new(fan_speed, 0..=100, 200.0, epaint::Color32::BLUE).text("hello"));
+            //ui.add(fan_gauge);
+
+            // ui.spacing_mut().slider_width = 300.0;
+            // ui.add(Slider::new(&mut fan_speed, 0..=100));
+            // ui.add(Gauge::new(fan_speed, 0..=100, 200.0, Color32::BLUE).text("hello"));
+            // ui.add(Gauge::new(fan_speed + 100, 100..=200, 300.0, Color32::RED).text("some text"));
+            
+            ui.collapsing("Cool Graphs", |ui|{
+
+                let data_point_slider = egui::Slider::new(&mut self.number_of_datapoints, 1..=100).text("Data Points");
+
+                ui.add(data_point_slider);
+
+                if(self.memory_graph.len() > self.number_of_datapoints){
+                    self.memory_graph.pop();
+                }
+                self.memory_graph.push(self.gpu_data.memory_used as f32);
+
+                egui_plot::Plot::new("Memory Graph")
+                //.allow_zoom(false)
+                .allow_drag(false)
+                .allow_scroll(false)
+                .x_axis_label("Time")
+                .y_axis_label("Memory in use")
+                .show(ui,|plot_ui|{
+                    let memory_points = egui_plot::PlotPoints::from_ys_f32(&self.memory_graph);
+                    plot_ui.line(egui_plot::Line::new(memory_points));
+
+                    // let xcomp = 0.0 as f64;//self.number_of_datapoints as f64;
+                    // print!("xcomp: {}",xcomp);
+                    // let ycomp = self.memory_graph[0] as f64;
+                    // print!("ycomp: {}",ycomp);
+
+                    //plot_ui.zoom_bounds(Vec2{x:0.25, y:0.25}, PlotPoint{x:xcomp, y:ycomp});
+
+                    plot_ui.set_auto_bounds(true.into());
+                });
+
+            })
         });
     }
 }
