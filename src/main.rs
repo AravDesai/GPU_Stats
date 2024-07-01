@@ -28,7 +28,7 @@ fn main() -> Result<(), eframe::Error> {
     eframe::run_native(
         "GPU stats",
         options,
-        Box::new(|cc| {
+        Box::new(|_cc| {
             Box::<MyApp>::default()
         }),
     )
@@ -70,7 +70,7 @@ impl Default for MyApp {
             device_indexer: 0,
             fan_indexer: 0,
             update_time: 0.5,
-            memory_graph: [].to_vec(),
+            memory_graph: [0.0].to_vec(),
             number_of_datapoints: 10,
         }
     }
@@ -365,7 +365,7 @@ impl eframe::App for MyApp {
                     .allow_drag(false)
                     .allow_scroll(false)
                     .x_axis_label("Time")
-                    .include_y(400.0)
+                    .include_y(400.0) //fix this such that it tracks the position
                     .y_axis_label("Memory in use")
                     .show(ui, |plot_ui| {
                         let memory_points = egui_plot::PlotPoints::from_ys_f32(&self.memory_graph);
