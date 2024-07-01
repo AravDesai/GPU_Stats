@@ -370,14 +370,6 @@ impl eframe::App for MyApp {
                     .show(ui, |plot_ui| {
                         let memory_points = egui_plot::PlotPoints::from_ys_f32(&self.memory_graph);
                         plot_ui.line(egui_plot::Line::new(memory_points));
-
-                        // let xcomp = 0.0 as f64;//self.number_of_datapoints as f64;
-                        // print!("xcomp: {}",xcomp);
-                        // let ycomp = self.memory_graph[0] as f64;
-                        // print!("ycomp: {}",ycomp);
-
-                        //plot_ui.zoom_bounds(Vec2{x:0.25, y:0.25}, PlotPoint{x:xcomp, y:ycomp});
-
                         plot_ui.set_auto_bounds(true.into());
                     }); 
 
