@@ -176,7 +176,7 @@ impl eframe::App for MyApp {
                         "Number of Fans: ".to_owned()
                             + &self.gpu_data[self.device_idx].num_fans.to_string(),
                     );
-                    ui.label("Fan Speed: ".to_owned() + &last_stat.fan_speed.to_string() + "RPM");
+                    ui.label("Fan Speed: ".to_owned() + &last_stat.fan_speed.to_string() + "%");
                 });
 
                 //Config menu
@@ -306,7 +306,7 @@ impl eframe::App for MyApp {
             ui.label("\nFan Speed");
 
             ui.add(
-                Gauge::new(last_stat.fan_speed, 0..=4000, 200.0, Color32::BLUE).text("Fan Speed"),
+                Gauge::new(last_stat.fan_speed, 0..=100, 200.0, Color32::BLUE).text("Fan Speed%"),
             );
 
             ui.collapsing("Cool Graphs", |ui| {
