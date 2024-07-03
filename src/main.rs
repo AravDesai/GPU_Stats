@@ -261,10 +261,7 @@ impl eframe::App for MyApp {
                 .hovered();
 
             //Thermometer
-            ui.label(
-                "Thermometer
-            ",
-            ); //Added newline for space
+            ui.label("Thermometer\n");
 
             //Bar portion of thermometer
             let thermometer = egui::ProgressBar::new(last_stat.temperature as f32 / 100.0)
@@ -305,13 +302,8 @@ impl eframe::App for MyApp {
             }
 
             //Fan Speed Info
-            ui.label(
-                "
-            ",
-            ); //more empty space
 
-            //Fan speed
-            ui.label("Fan Speed");
+            ui.label("\nFan Speed");
 
             ui.add(
                 Gauge::new(last_stat.fan_speed, 0..=4000, 200.0, Color32::BLUE).text("Fan Speed"),
