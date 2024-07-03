@@ -3,6 +3,21 @@
 version = 3
 
 [[package]]
+name = "GPU_Stats"
+version = "0.1.0"
+dependencies = [
+ "ecolor",
+ "eframe",
+ "egui-winit",
+ "egui_extras",
+ "egui_plot",
+ "emath 0.13.0",
+ "env_logger",
+ "epaint",
+ "nvml-wrapper",
+]
+
+[[package]]
 name = "ab_glyph"
 version = "0.2.26"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1094,15 +1109,19 @@ dependencies = [
 ]
 
 [[package]]
-name = "egui_project"
-version = "0.1.0"
+name = "egui_plot"
+version = "0.27.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a7854b86dc1c2d352c5270db3d600011daa913d6b554141a03939761323288a1"
 dependencies = [
- "eframe",
  "egui",
- "egui_extras",
- "env_logger",
- "nvml-wrapper",
 ]
+
+[[package]]
+name = "emath"
+version = "0.13.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "80eea7508c08a7b4e2a041adcdca6f400d8606622c6bb980ecbbdc5f1aff9a4c"
 
 [[package]]
 name = "emath"
@@ -1200,7 +1219,7 @@ dependencies = [
  "ahash",
  "bytemuck",
  "ecolor",
- "emath",
+ "emath 0.27.2",
  "log",
  "nohash-hasher",
  "parking_lot",
