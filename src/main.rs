@@ -1,42 +1,43 @@
-use eframe::egui::{self, Context, Vec2b};
-use eframe::Frame;
-use egui::{Color32, ComboBox, Event, Pos2, Response, Slider, Vec2, Widget};
-use egui_gauge::Gauge;
-use egui_plot::{self, Axis, PlotBounds, PlotPoint};
-use egui_winit;
-use epaint;
+#![windows_subsystem = "windows"]
+
+use eframe::egui::{self, Context};
+use egui::{Color32, Pos2};
+use egui_plot;
+use gauge::gauge_at_home::Gauge;
 use nvml_wrapper::enum_wrappers::device::TemperatureSensor;
-use nvml_wrapper::error::NvmlError;
 use nvml_wrapper::Nvml;
 use std::sync::mpsc;
-use std::thread::{self, sleep};
+use std::thread;
 use std::time::Duration;
+pub mod gauge;
 
 #[derive(Default, Clone, Copy)]
 struct Stat {
     memory_used: u64,
     temperature: u32,
     utilization: u32,
+    fan_speed: u32,
 }
 
 struct GpuData {
     name: String,
     memory_total: u64,
     history: Vec<Stat>,
+    num_fans: u32,
 }
 
 fn main() -> Result<(), eframe::Error> {
     env_logger::init();
 
     let options = eframe::NativeOptions {
-        viewport: egui::ViewportBuilder::default().with_inner_size([500.0, 300.0]),
+        viewport: egui::ViewportBuilder::default().with_inner_size([500.0, 500.0]),
         ..Default::default()
     };
     eframe::run_native(
         "GPU stats",
         options,
-        Box::new(|cc| Box::new(MyApp::init(cc.egui_ctx.clone())),
-    ))
+        Box::new(|cc| Box::new(MyApp::init(cc.egui_ctx.clone()))),
+    )
 }
 
 struct MyApp {
@@ -44,7 +45,6 @@ struct MyApp {
     animate_memory_bar: bool,
     animate_thermometer_bar: bool,
     c_to_f_indexer: usize, //change to enum/bool
-    tester: u64,
     device_idx: usize,
     fan_idx: usize,
     number_of_datapoints: usize,
@@ -59,34 +59,36 @@ impl MyApp {
 
         let mut gpu_data = vec![];
 
-        for device in 0..device_count{
+        for device in 0..device_count {
             let device = nvml.device_by_index(device).unwrap();
-            gpu_data.push(GpuData{
+            gpu_data.push(GpuData {
                 name: device.name().unwrap(),
                 memory_total: device.memory_info().unwrap().total / 1024 / 1024,
                 history: vec![],
+                num_fans: device.num_fans().unwrap(),
             });
         }
 
-        let (tx,rx) = mpsc::channel();
+        let (tx, rx) = mpsc::channel();
 
-        thread::spawn(move || {
-            loop {
-                let mut stat_data = vec![];
-                for device in 0..device_count{
-                    let device = nvml.device_by_index(device).unwrap();
+        thread::spawn(move || loop {
+            let mut stat_data = vec![];
+            for device in 0..device_count {
+                let device = nvml.device_by_index(device).unwrap();
 
-                    stat_data.push(Stat{
-                        memory_used: device.memory_info().unwrap().used / 1024 / 1024,
-                        temperature: device.temperature(TemperatureSensor::Gpu).unwrap(),
-                        utilization: device.encoder_utilization().unwrap().utilization,
-                    });
-
-                }
-                tx.send(stat_data).unwrap();
-                ctx.request_repaint();
-                thread::sleep(Duration::from_millis(500));
+                stat_data.push(Stat {
+                    memory_used: device.memory_info().unwrap().used / 1024 / 1024,
+                    temperature: device.temperature(TemperatureSensor::Gpu).unwrap(),
+                    utilization: device.encoder_utilization().unwrap().utilization,
+                    fan_speed: match device.fan_speed(0) {
+                        Ok(speed) => speed,
+                        Err(_e) => 0,
+                    },
+                });
             }
+            tx.send(stat_data).unwrap();
+            ctx.request_repaint();
+            thread::sleep(Duration::from_millis(500));
         });
         Self {
             stat_rx: rx,
@@ -94,7 +96,6 @@ impl MyApp {
             animate_memory_bar: false,
             animate_thermometer_bar: false,
             c_to_f_indexer: 0,
-            tester: 1,
             device_idx: 0,
             fan_idx: 0,
             number_of_datapoints: 10,
@@ -118,17 +119,20 @@ fn color_gradient(temperature: u32) -> Color32 {
 impl eframe::App for MyApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         egui::CentralPanel::default().show(ctx, |ui| {
-            
             let received = self.stat_rx.try_recv();
 
-            if let Ok(stats) = received{
-                for (idx,stat) in stats.into_iter().enumerate(){
+            if let Ok(stats) = received {
+                for (idx, stat) in stats.into_iter().enumerate() {
                     self.gpu_data[idx].history.push(stat);
                 }
             }
 
-
-            let last_stat = self.gpu_data[self.device_idx].history.iter().last().copied().unwrap_or_default();
+            let last_stat = self.gpu_data[self.device_idx]
+                .history
+                .iter()
+                .last()
+                .copied()
+                .unwrap_or_default();
             let memory_util = ((((last_stat.memory_used as f64
                 / self.gpu_data[self.device_idx].memory_total as f64)
                 * 100.0)
@@ -158,12 +162,21 @@ impl eframe::App for MyApp {
                     ui.label(
                         "Memory Utilization: ".to_owned() + memory_util.to_string().as_str() + "%",
                     );
-                    ui.label("Encoder Utilization: ".to_owned() + &last_stat.utilization.to_string() + "%");
+                    ui.label(
+                        "Encoder Utilization: ".to_owned()
+                            + &last_stat.utilization.to_string()
+                            + "%",
+                    );
                     ui.label(
                         "Temperature: ".to_owned()
                             + &last_stat.temperature.to_string()
                             + curr_temp_type,
                     );
+                    ui.label(
+                        "Number of Fans: ".to_owned()
+                            + &self.gpu_data[self.device_idx].num_fans.to_string(),
+                    );
+                    ui.label("Fan Speed: ".to_owned() + &last_stat.fan_speed.to_string() + "RPM");
                 });
 
                 //Config menu
@@ -178,11 +191,10 @@ impl eframe::App for MyApp {
 
                 let mut device_names = vec![];
 
-                for idx in 0..self.gpu_data.len(){
+                for idx in 0..self.gpu_data.len() {
                     device_names.push(self.gpu_data[idx].name.clone())
                 }
 
-                
                 ui.allocate_ui_at_rect(holder_rect, |ui| {
                     ui.collapsing("Configurations", |ui| {
                         egui::ComboBox::from_label("GPU Picker")
@@ -204,45 +216,26 @@ impl eframe::App for MyApp {
                                 }
                             });
 
-                        // egui::ComboBox::from_label("Fan Picker")
-                        //     .selected_text(format!("Fan {}", self.fan_idx))
-                        //     .show_ui(ui, |ui| {
-                        //         for (index, fan) in fans.iter().enumerate() {
-                        //             let indexer = index as u32;
-                        //             if ui
-                        //                 .selectable_value(
-                        //                     &mut self.fan_idx,
-                        //                     indexer,
-                        //                     format!("Fan {}", index),
-                        //                 )
-                        //                 .clicked()
-                        //             {
-                        //                 self.fan_idx = indexer;
-                        //             }
-                        //         }
-                        //     });
+                        let mut fans: Vec<String> = vec![];
 
-                        let mut tester_combo = vec![];
-                        let mut test_count = 0;
-                        while (test_count <= 3) {
-                            tester_combo.push(test_count);
-                            test_count += 1;
+                        for idx in 0..self.gpu_data[self.device_idx].num_fans {
+                            fans.push(idx.to_string())
                         }
 
-                        egui::ComboBox::from_label("Tester")
-                            .selected_text(format!("Value {}", self.tester))
+                        egui::ComboBox::from_label("Fan Picker")
+                            .selected_text(format!("Fan {}", self.fan_idx))
                             .show_ui(ui, |ui| {
-                                for (index, value) in tester_combo.iter().enumerate() {
-                                    let indexer = index as u64;
+                                for (index, _fan) in fans.iter().enumerate() {
+                                    let indexer = index as u32;
                                     if ui
                                         .selectable_value(
-                                            &mut self.tester,
-                                            indexer,
-                                            format!("Value {}", index),
+                                            &mut self.fan_idx,
+                                            indexer as usize,
+                                            format!("Fan {}", index),
                                         )
                                         .clicked()
                                     {
-                                        self.tester = indexer;
+                                        self.fan_idx = indexer as usize;
                                     }
                                 }
                             });
@@ -253,7 +246,10 @@ impl eframe::App for MyApp {
             //Memory bar code
             let insert_memory_text = last_stat.memory_used.to_string()
                 + "MB/"
-                + self.gpu_data[self.device_idx].memory_total.to_string().as_str()
+                + self.gpu_data[self.device_idx]
+                    .memory_total
+                    .to_string()
+                    .as_str()
                 + "MB";
             ui.label("Memory Usage");
             let memory_bar = egui::ProgressBar::new(memory_util as f32 / 100.0)
@@ -263,9 +259,6 @@ impl eframe::App for MyApp {
                 .add(memory_bar)
                 .on_hover_text(insert_memory_text)
                 .hovered();
-
-            //Testing bar
-            //ui.add(egui::Slider::new(&mut self.tester, 0..=100).text("Testing Bar"));
 
             //Thermometer
             ui.label(
@@ -317,65 +310,48 @@ impl eframe::App for MyApp {
             ",
             ); //more empty space
 
-            
+            //Fan speed
+            ui.label("Fan Speed");
 
-            //Fan speed stuff [WIP]
-
-            // let mut fans = vec![];
-
-            //     if let Ok(i) = self
-            //         .nvml
-            //         .device_by_index(self.device_idx)
-            //         .unwrap()
-            //         .num_fans()
-            //     {
-            //         fans.push(i);
-            //     }
-
-            // let fan_speed = match device.fan_speed(self.fan_idx) {
-            //     Ok(speed) => speed,
-            //     Err(_E) => 0,
-            // };
-            // ui.label("Number of Fans: ".to_owned() + &device.num_fans().unwrap().to_string());
-            // ui.label("Fan speed: ".to_owned() + &fan_speed.to_string());
-            // let fan_gauge = egui_gauge::Gauge::new(fan_speed, 0..=100, 300.0, epaint::Color32::BLUE);
-
-            // ui.spacing_mut().slider_width = 300.0;
-            // ui.add(Slider::new(&mut self.tester, 0..=100));
-            // let fan_gauge = Gauge::new(self.tester, 0..=100, 200.0, epaint::Color32::BLUE);
-            //ui.add(Gauge::new(fan_speed, 0..=100, 200.0, epaint::Color32::BLUE).text("hello"));
-            //ui.add(fan_gauge);
-
-            // ui.spacing_mut().slider_width = 300.0;
-            // ui.add(Slider::new(&mut fan_speed, 0..=100));
-            // ui.add(Gauge::new(fan_speed, 0..=100, 200.0, Color32::BLUE).text("hello"));
-            // ui.add(Gauge::new(fan_speed + 100, 100..=200, 300.0, Color32::RED).text("some text"));
-
-            
+            ui.add(
+                Gauge::new(last_stat.fan_speed, 0..=4000, 200.0, Color32::BLUE).text("Fan Speed"),
+            );
 
             ui.collapsing("Cool Graphs", |ui| {
                 egui::ScrollArea::vertical().show(ui, |ui| {
                     let data_point_slider =
-                        egui::Slider::new(&mut self.number_of_datapoints, 1..=100).text("Data Points");
+                        egui::Slider::new(&mut self.number_of_datapoints, 1..=100)
+                            .text("Data Points");
 
                     ui.add(data_point_slider);
 
-                    while (self.gpu_data[self.device_idx].history.len() > self.number_of_datapoints) {
+                    while self.gpu_data[self.device_idx].history.len() > self.number_of_datapoints {
                         self.gpu_data[self.device_idx].history.remove(0); //do for all gpus
                     }
 
                     ui.label("Memory Graph");
-                    
+
                     egui_plot::Plot::new("Memory Graph")
                         .allow_drag(false)
                         .allow_scroll(false)
+                        .allow_zoom(false)
                         .x_axis_label("Time")
                         .include_y(0.0)
                         .y_axis_label("Memory in use")
-                        .height(600.0)
+                        .height(500.0)
                         .show(ui, |plot_ui| {
-                            let memory_points = egui_plot::PlotPoints::from_ys_f32(&self.gpu_data[self.device_idx].history.iter().map(|s|s.memory_used as f32).collect::<Vec<f32>>());
-                            plot_ui.line(egui_plot::Line::new(memory_points).fill(0.0).color(Color32::BLUE));
+                            let memory_points = egui_plot::PlotPoints::from_ys_f32(
+                                &self.gpu_data[self.device_idx]
+                                    .history
+                                    .iter()
+                                    .map(|s| s.memory_used as f32)
+                                    .collect::<Vec<f32>>(),
+                            );
+                            plot_ui.line(
+                                egui_plot::Line::new(memory_points)
+                                    .fill(0.0)
+                                    .color(Color32::BLUE),
+                            );
                             plot_ui.set_auto_bounds(true.into());
                         });
 
@@ -384,17 +360,28 @@ impl eframe::App for MyApp {
                     egui_plot::Plot::new("Temperature Graph")
                         .allow_drag(false)
                         .allow_scroll(false)
+                        .allow_zoom(false)
                         .x_axis_label("Time")
                         .include_y(40.0)
-                        .height(600.0)
+                        .height(500.0)
                         .y_axis_label("Temperature")
                         .show(ui, |plot_ui| {
-                            let temperature_points = egui_plot::PlotPoints::from_ys_f32(&self.gpu_data[self.device_idx].history.iter().map(|s|s.temperature as f32).collect::<Vec<f32>>());
-                            plot_ui.line(egui_plot::Line::new(temperature_points).fill(0.0).color(Color32::RED));
-                            
+                            let temperature_points = egui_plot::PlotPoints::from_ys_f32(
+                                &self.gpu_data[self.device_idx]
+                                    .history
+                                    .iter()
+                                    .map(|s| s.temperature as f32)
+                                    .collect::<Vec<f32>>(),
+                            );
+                            plot_ui.line(
+                                egui_plot::Line::new(temperature_points)
+                                    .fill(0.0)
+                                    .color(Color32::RED),
+                            );
+
                             plot_ui.set_auto_bounds(true.into());
                         });
-                    });
+                });
             })
         });
     }
