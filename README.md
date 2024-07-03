@@ -1,8 +1,8 @@
 # Usage
-Displays Nvidia GPU information
-Note:
-This currently only works if you have an Nvidia GPU
-Fan speed on laptops displays as 0
+Displays Nvidia GPU information  
+Note:  
+This currently only works if you have an Nvidia GPU  
+Fan speed on laptops displays as 0  
 
 # TODO
 + [x] Finish Thermometer
