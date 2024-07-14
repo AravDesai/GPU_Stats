@@ -15,3 +15,4 @@ epaint = "0.27.2"
 egui-winit = "0.27.2"
 egui_plot = "0.27.2"
 ecolor = "0.27.2"
+egui_gauge = { git = "https://github.com/bobbobbio/egui_gauge" }

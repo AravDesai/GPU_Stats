@@ -2,14 +2,13 @@
 
 use eframe::egui::{self, Context};
 use egui::{Color32, Pos2};
+use egui_gauge::Gauge;
 use egui_plot;
-use gauge::gauge_at_home::Gauge;
 use nvml_wrapper::enum_wrappers::device::TemperatureSensor;
 use nvml_wrapper::Nvml;
 use std::sync::mpsc;
 use std::thread;
 use std::time::Duration;
-pub mod gauge;
 
 #[derive(Default, Clone, Copy)]
 struct Stat {
