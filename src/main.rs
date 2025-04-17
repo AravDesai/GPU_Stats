@@ -3,7 +3,6 @@
 use eframe::egui::{self, Context};
 use egui::{Color32, Pos2};
 use egui_gauge::Gauge;
-use egui_plot;
 use nvml_wrapper::enum_wrappers::device::TemperatureSensor;
 use nvml_wrapper::Nvml;
 use std::sync::mpsc;
@@ -43,7 +42,7 @@ struct MyApp {
     gpu_data: Vec<GpuData>,
     animate_memory_bar: bool,
     animate_thermometer_bar: bool,
-    c_to_f_indexer: usize, //change to enum/bool
+    c_to_f_indexer: usize,
     device_idx: usize,
     fan_idx: usize,
     number_of_datapoints: usize,
@@ -79,10 +78,7 @@ impl MyApp {
                     memory_used: device.memory_info().unwrap().used / 1024 / 1024,
                     temperature: device.temperature(TemperatureSensor::Gpu).unwrap(),
                     utilization: device.encoder_utilization().unwrap().utilization,
-                    fan_speed: match device.fan_speed(0) {
-                        Ok(speed) => speed,
-                        Err(_e) => 0,
-                    },
+                    fan_speed: device.fan_speed(0).unwrap_or_default(),
                 });
             }
             tx.send(stat_data).unwrap();
@@ -112,7 +108,7 @@ fn color_gradient(temperature: u32) -> Color32 {
     if blue < 0 {
         blue = 0;
     }
-    return Color32::from_rgb(red as u8, 0, blue as u8);
+    Color32::from_rgb(red as u8, 0, blue as u8)
 }
 
 impl eframe::App for MyApp {
@@ -143,173 +139,176 @@ impl eframe::App for MyApp {
             let curr_temp_type = c_to_f[self.c_to_f_indexer];
 
             //Start of ui being built
-            ui.heading("GPU Stats");
+            egui::ScrollArea::vertical().show(ui, |ui| {
+                ui.heading("GPU Stats");
 
-            ui.horizontal(|ui| {
-                //Collapsable menu that shows all the condensed stats
+                ui.horizontal(|ui| {
+                    //Collapsable menu that shows all the condensed stats
 
-                let holder = ui.collapsing("All stats", |ui| {
-                    ui.label(&self.gpu_data[self.device_idx].name);
-                    ui.label(
-                        "Memory used: ".to_owned() + &last_stat.memory_used.to_string() + "MB",
-                    );
-                    ui.label(
-                        "Memory total: ".to_owned()
-                            + &self.gpu_data[self.device_idx].memory_total.to_string()
-                            + "MB",
-                    );
-                    ui.label(
-                        "Memory Utilization: ".to_owned() + memory_util.to_string().as_str() + "%",
-                    );
-                    ui.label(
-                        "Encoder Utilization: ".to_owned()
-                            + &last_stat.utilization.to_string()
-                            + "%",
-                    );
-                    ui.label(
-                        "Temperature: ".to_owned()
-                            + &last_stat.temperature.to_string()
-                            + curr_temp_type,
-                    );
-                    ui.label(
-                        "Number of Fans: ".to_owned()
-                            + &self.gpu_data[self.device_idx].num_fans.to_string(),
-                    );
-                    ui.label("Fan Speed: ".to_owned() + &last_stat.fan_speed.to_string() + "%");
-                });
+                    let holder = ui.collapsing("All stats", |ui| {
+                        ui.label(&self.gpu_data[self.device_idx].name);
+                        ui.label(
+                            "Memory used: ".to_owned() + &last_stat.memory_used.to_string() + "MB",
+                        );
+                        ui.label(
+                            "Memory total: ".to_owned()
+                                + &self.gpu_data[self.device_idx].memory_total.to_string()
+                                + "MB",
+                        );
+                        ui.label(
+                            "Memory Utilization: ".to_owned()
+                                + memory_util.to_string().as_str()
+                                + "%",
+                        );
+                        ui.label(
+                            "Encoder Utilization: ".to_owned()
+                                + &last_stat.utilization.to_string()
+                                + "%",
+                        );
+                        ui.label(
+                            "Temperature: ".to_owned()
+                                + &last_stat.temperature.to_string()
+                                + curr_temp_type,
+                        );
+                        ui.label(
+                            "Number of Fans: ".to_owned()
+                                + &self.gpu_data[self.device_idx].num_fans.to_string(),
+                        );
+                        ui.label("Fan Speed: ".to_owned() + &last_stat.fan_speed.to_string() + "%");
+                    });
 
-                //Config menu
+                    //Config menu
 
-                let holder_rect = egui::Rect {
-                    min: Pos2 {
-                        x: holder.header_response.rect.min.x + 250.0,
-                        y: holder.header_response.rect.min.y,
-                    },
-                    max: holder.header_response.rect.max,
-                };
+                    let holder_rect = egui::Rect {
+                        min: Pos2 {
+                            x: holder.header_response.rect.min.x + 250.0,
+                            y: holder.header_response.rect.min.y,
+                        },
+                        max: holder.header_response.rect.max,
+                    };
 
-                let mut device_names = vec![];
+                    let mut device_names = vec![];
 
-                for idx in 0..self.gpu_data.len() {
-                    device_names.push(self.gpu_data[idx].name.clone())
-                }
+                    for idx in 0..self.gpu_data.len() {
+                        device_names.push(self.gpu_data[idx].name.clone())
+                    }
 
-                ui.allocate_ui_at_rect(holder_rect, |ui| {
-                    ui.collapsing("Configurations", |ui| {
-                        egui::ComboBox::from_label("GPU Picker")
-                            .selected_text(format!("{device_names:?}"))
-                            .show_ui(ui, |ui| {
-                                let mut indexer = 0;
-                                for selectable in device_names {
-                                    if ui
-                                        .selectable_value(
-                                            &mut self.gpu_data[self.device_idx].name,
-                                            selectable.clone(),
-                                            selectable,
-                                        )
-                                        .clicked()
-                                    {
-                                        self.device_idx = indexer;
+                    ui.allocate_ui_at_rect(holder_rect, |ui| {
+                        ui.collapsing("Configurations", |ui| {
+                            egui::ComboBox::from_label("GPU Picker")
+                                .selected_text(format!("{device_names:?}"))
+                                .show_ui(ui, |ui| {
+                                    let mut indexer = 0;
+                                    for selectable in device_names {
+                                        if ui
+                                            .selectable_value(
+                                                &mut self.gpu_data[self.device_idx].name,
+                                                selectable.clone(),
+                                                selectable,
+                                            )
+                                            .clicked()
+                                        {
+                                            self.device_idx = indexer;
+                                        }
+                                        indexer += 1;
                                     }
-                                    indexer += 1;
-                                }
-                            });
+                                });
 
-                        let mut fans: Vec<String> = vec![];
+                            let mut fans: Vec<String> = vec![];
 
-                        for idx in 0..self.gpu_data[self.device_idx].num_fans {
-                            fans.push(idx.to_string())
-                        }
+                            for idx in 0..self.gpu_data[self.device_idx].num_fans {
+                                fans.push(idx.to_string())
+                            }
 
-                        egui::ComboBox::from_label("Fan Picker")
-                            .selected_text(format!("Fan {}", self.fan_idx))
-                            .show_ui(ui, |ui| {
-                                for (index, _fan) in fans.iter().enumerate() {
-                                    let indexer = index as u32;
-                                    if ui
-                                        .selectable_value(
-                                            &mut self.fan_idx,
-                                            indexer as usize,
-                                            format!("Fan {}", index),
-                                        )
-                                        .clicked()
-                                    {
-                                        self.fan_idx = indexer as usize;
+                            egui::ComboBox::from_label("Fan Picker")
+                                .selected_text(format!("Fan {}", self.fan_idx))
+                                .show_ui(ui, |ui| {
+                                    for (index, _fan) in fans.iter().enumerate() {
+                                        let indexer = index as u32;
+                                        if ui
+                                            .selectable_value(
+                                                &mut self.fan_idx,
+                                                indexer as usize,
+                                                format!("Fan {}", index),
+                                            )
+                                            .clicked()
+                                        {
+                                            self.fan_idx = indexer as usize;
+                                        }
                                     }
-                                }
-                            });
+                                });
+                        });
                     });
                 });
-            });
 
-            //Memory bar code
-            let insert_memory_text = last_stat.memory_used.to_string()
-                + "MB/"
-                + self.gpu_data[self.device_idx]
-                    .memory_total
-                    .to_string()
-                    .as_str()
-                + "MB";
-            ui.label("Memory Usage");
-            let memory_bar = egui::ProgressBar::new(memory_util as f32 / 100.0)
-                .show_percentage()
-                .animate(self.animate_memory_bar);
-            self.animate_memory_bar = ui
-                .add(memory_bar)
-                .on_hover_text(insert_memory_text)
-                .hovered();
+                //Memory bar code
+                let insert_memory_text = last_stat.memory_used.to_string()
+                    + "MB/"
+                    + self.gpu_data[self.device_idx]
+                        .memory_total
+                        .to_string()
+                        .as_str()
+                    + "MB";
+                ui.label("Memory Usage");
+                let memory_bar = egui::ProgressBar::new(memory_util as f32 / 100.0)
+                    .show_percentage()
+                    .animate(self.animate_memory_bar);
+                self.animate_memory_bar = ui
+                    .add(memory_bar)
+                    .on_hover_text(insert_memory_text)
+                    .hovered();
 
-            //Thermometer
-            ui.label("Thermometer\n");
+                //Thermometer
+                ui.label("Thermometer\n");
 
-            //Bar portion of thermometer
-            let thermometer = egui::ProgressBar::new(last_stat.temperature as f32 / 100.0)
-                .fill(color_gradient(last_stat.temperature))
-                .animate(self.animate_thermometer_bar);
+                //Bar portion of thermometer
+                let thermometer = egui::ProgressBar::new(last_stat.temperature as f32 / 100.0)
+                    .fill(color_gradient(last_stat.temperature))
+                    .animate(self.animate_thermometer_bar);
 
-            // Bulb portion of thermometer
+                // Bulb portion of thermometer
 
-            let thermometer_rect = ui.add(thermometer).rect;
+                let thermometer_rect = ui.add(thermometer).rect;
 
-            ui.allocate_ui_at_rect(thermometer_rect, |ui| {
-                let painter = ui.painter();
-                painter.circle(
-                    Pos2 {
-                        x: thermometer_rect.min.x + 13.0,
-                        y: thermometer_rect.min.y + 8.0,
-                    },
-                    20.0,
-                    color_gradient(last_stat.temperature),
-                    egui::Stroke {
-                        width: 0.0,
-                        color: Color32::from_rgb(255, 255, 255),
-                    },
+                ui.allocate_ui_at_rect(thermometer_rect, |ui| {
+                    let painter = ui.painter();
+                    painter.circle(
+                        Pos2 {
+                            x: thermometer_rect.min.x + 13.0,
+                            y: thermometer_rect.min.y + 8.0,
+                        },
+                        20.0,
+                        color_gradient(last_stat.temperature),
+                        egui::Stroke {
+                            width: 0.0,
+                            color: Color32::from_rgb(255, 255, 255),
+                        },
+                    );
+
+                    let temp_changer = ui
+                        .button(self.special_temp.to_string() + curr_temp_type)
+                        .on_hover_text("Click to change unit");
+                    if temp_changer.clicked() {
+                        self.c_to_f_indexer = if self.c_to_f_indexer == 0 { 1 } else { 0 };
+                    }
+                });
+
+                if self.c_to_f_indexer == 1 {
+                    self.special_temp = ((9 * last_stat.temperature) / 5) + 32;
+                } else {
+                    self.special_temp = last_stat.temperature;
+                }
+
+                //Fan Speed Info
+
+                ui.label("\nFan Speed");
+
+                ui.add(
+                    Gauge::new(last_stat.fan_speed, 0..=100, 200.0, Color32::BLUE)
+                        .text("Fan Speed%"),
                 );
 
-                let temp_changer = ui
-                    .button(self.special_temp.to_string() + curr_temp_type)
-                    .on_hover_text("Click to change unit");
-                if temp_changer.clicked() {
-                    self.c_to_f_indexer = if self.c_to_f_indexer == 0 { 1 } else { 0 };
-                }
-            });
-
-            if self.c_to_f_indexer == 1 {
-                self.special_temp = ((9 * last_stat.temperature) / 5) + 32;
-            } else {
-                self.special_temp = last_stat.temperature;
-            }
-
-            //Fan Speed Info
-
-            ui.label("\nFan Speed");
-
-            ui.add(
-                Gauge::new(last_stat.fan_speed, 0..=100, 200.0, Color32::BLUE).text("Fan Speed%"),
-            );
-
-            ui.collapsing("Cool Graphs", |ui| {
-                egui::ScrollArea::vertical().show(ui, |ui| {
+                ui.collapsing("Graphs", |ui| {
                     let data_point_slider =
                         egui::Slider::new(&mut self.number_of_datapoints, 1..=100)
                             .text("Data Points");
@@ -317,7 +316,7 @@ impl eframe::App for MyApp {
                     ui.add(data_point_slider);
 
                     while self.gpu_data[self.device_idx].history.len() > self.number_of_datapoints {
-                        self.gpu_data[self.device_idx].history.remove(0); //do for all gpus
+                        self.gpu_data[self.device_idx].history.remove(0);
                     }
 
                     ui.label("Memory Graph");
@@ -372,8 +371,8 @@ impl eframe::App for MyApp {
 
                             plot_ui.set_auto_bounds(true.into());
                         });
-                });
-            })
+                })
+            });
         });
     }
 }
